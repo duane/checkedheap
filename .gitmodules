@@ -1,0 +1,12 @@
+[submodule "src/heap_layers"]
+	path = src/heap_layers
+	url = git://github.com/emeryberger/Heap-Layers.git
+[submodule "src/diehard"]
+	path = src/diehard
+	url = git://github.com/emeryberger/DieHard.git
+[submodule "Heap-Layers"]
+	path = Heap-Layers
+	url = ./Heap-Layers/
+[submodule "diehard"]
+	path = diehard
+	url = ./diehard
