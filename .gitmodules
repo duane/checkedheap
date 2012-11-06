@@ -1,3 +1,6 @@
 [submodule "Heap-Layers"]
 	path = Heap-Layers
 	url = https://github.com/duane/Heap-Layers.git
+[submodule "DieHard"]
+	path = DieHard
+	url = https://github.com/duane/DieHard.git

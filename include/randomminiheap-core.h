@@ -129,7 +129,6 @@ public:
   }
 
   virtual void validate(void) {
-
   }
 
   /// @brief Activates the heap, making it ready for allocations.

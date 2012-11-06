@@ -1,21 +1,49 @@
-CXX=clang++ -Qunused-arguments
-LIBNAME=libcheckedheap.dylib
 INCLUDES=-Iinclude -IHeap-Layers
-CXXFLAGS=-Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror -g -O0  -mpreferred-stack-boundary=4 -msse2 -arch i386 -arch x86_64 $(INCLUDES) -D'CUSTOM_PREFIX(X)=xx\#\#x' -dynamiclib -D_REENTRANT=1 
-LDFLAGS=-gstubs
+DEBUG ?= -g
+OPT ?= -O0 $(DEBUG)
+CFLAGS=-Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror $(OPT) -malign-double -finline-functions -ffast-math -fomit-frame-pointer -D_REENTRANT=1 -pipe $(INCLUDES) -fPIC
+CXXFLAGS=$(CFLAGS) -fno-rtti
+LDFLAGS=
 
-all: libcheckedheap
+SRCS = src/libcheckedheap.cpp
+STUBSRCS = src/check_heap_stub.c
+
+OS := $(shell uname -s)
+
+ifeq ($(OS), Darwin)
+CC=clang
+CXX=clang++
+LIBEXT=dylib
+CXXFLAGS += -msse2 -arch i386 -arch x86_64 -D'CUSTOM_PREFIX(X)=xx\#\#x'
+LDFLAGS += -dynamiclib
+SRCS += Heap-Layers/wrappers/macwrapper.cpp
+else ifeq ($(OS), Linux)
+CC=clang
+CXX=clang++
+CXXFLAGS += -march=core2
+CXXFLAGS += -Wno-deprecated-declarations # for __malloc_hook and friends
+LDFLAGS += -shared -Bsymbolic -ldl
+LIBEXT=so
+SRCS += Heap-Layers/wrappers/gnuwrapper.cpp
+endif
+
+LIBPATH = libcheckedheap.$(LIBEXT)
+STUBLIBPATH = libcheckedheapstub.$(LIBEXT)
+
+all: libcheckedheap libcheckheapstub
 
 libcheckedheap:
-	$(CXX) -o $(LIBNAME) src/libcheckedheap.cpp Heap-Layers/wrappers/macwrapper.cpp $(CXXFLAGS) $(LDFLAGS)
+	$(CXX) -o $(LIBPATH) $(SRCS)  $(CXXFLAGS) $(LDFLAGS)
+
+libcheckheapstub:
+	$(CC) -o $(STUBLIBPATH) $(STUBSRCS) $(CFLAGS) $(LDFLAGS)
 
 test: 
 	make -C test;
 	test/run_all.sh
 
 clean:
-	rm -f $(LIBNAME)
+	rm -f $(LIBPATH) $(SUBLIBPATH)
 	make clean -C test
-
 
 .PHONY: test

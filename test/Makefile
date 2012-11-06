@@ -1,51 +1,55 @@
 
-
 CC=clang
 CXX=clang++
 
-CFLAGS=-g -O0 -Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror
-CXXFLAGS=$(CFLAGS) -gstabs
-LDFLAGS=check_heap.o
+CFLAGS=-g -O0 -Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror -I../DieHard/src/replicated
+CXXFLAGS=$(CFLAGS)
+LDFLAGS=-L.. -lcheckedheapstub -lpthread
+
+PWD := $(shell pwd)
+LIBDIR := $(shell cd ..; pwd)
+
+OS := $(shell uname -s)
+ifeq ($(OS), Linux)
+LDFLAGS += -Wl,-rpath=$(LIBDIR)
+endif
 
 DEPS=danglingptr.cpp disaster.cpp doublefree.cpp illegalread.cpp malloc-verifier.cpp test1.cpp test2.cpp test3.cpp test4.cpp testsocket.cpp 
 
-all: check_heap_test danglingptr disaster doublefree illegalread malloc-verifier test1 test2 test3 test4 testsocket
+all: check_heap danglingptr disaster doublefree illegalread malloc-verifier test1 test2 test3 test4 testsocket
 
-check_heap.o:
-	$(CC) -c check_heap.c -o $@ $< $(CFLAGS)
-
-check_heap_test: check_heap_test.cpp check_heap.o
+check_heap: check_heap.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS) -I../include
 
-danglingptr: danglingptr.cpp check_heap.o
+danglingptr: danglingptr.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
 
-disaster: disaster.cpp check_heap.o
+disaster: disaster.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
 
-doublefree: doublefree.cpp check_heap.o
+doublefree: doublefree.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
 
-illegalread: illegalread.cpp check_heap.o
+illegalread: illegalread.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
 
-malloc-verifier: malloc-verifier.cpp check_heap.o
+malloc-verifier: malloc-verifier.cpp
+	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS) -lpthread
+
+test1: test1.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
 
-test1: test1.cpp check_heap.o
+test2: test2.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
 
-test2: test2.cpp check_heap.o
+test3: test3.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
 
-test3: test3.cpp check_heap.o
+test4: test4.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
 
-test4: test4.cpp check_heap.o
-	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
-
-testsocket: testsocket.cpp check_heap.o
-	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS) -I../diehard/src/replicated # for socket.h
+testsocket: testsocket.cpp
+	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS) -I../DieHard/src/replicated -lpthread
 
 clean:
-	rm -f check_heap_test danglingptr disaster doublefree illegalread malloc-verifier test1 test2 test3 test4 testsocket check_heap.o
+	rm -f check_heap danglingptr disaster doublefree illegalread malloc-verifier test1 test2 test3 test4 testsocket

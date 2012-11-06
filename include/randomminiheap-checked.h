@@ -59,10 +59,6 @@ class RandomMiniCheckedHeap :
 
   bool free (void * ptr) {
     if (SuperHeap::free(ptr)) {
-      // Check for overflows into adjacent objects,
-      // then fill the freed object with a known random value.
-      //	checkOverflowError (ptr, index);
-
       DieFast::fill (ptr, ObjectSize, SuperHeap::_freedValue);
       return true;
     }
@@ -71,19 +67,23 @@ class RandomMiniCheckedHeap :
 
   void validate (void) {
     for (size_t i = 0; i < NObjects; ++i) { 
-      void* ptr = NULL;
-      if (!SuperHeap::_miniHeapBitmap.isSet(i) &&
-          (ptr = checkWhereNot(getObject(i),
-                               ObjectSize,
-                               SuperHeap::_freedValue)) != NULL) {
-        register_missing_canary(ptr);
-      }
+      validate_object(i);
     }
   }
 
   typedef RandomMiniHeapCore<Numerator, Denominator, ObjectSize, NObjects, Allocator> SuperHeap;
 
 protected:
+
+  void validate_object(size_t i) {
+    void* ptr;
+    if (!SuperHeap::_miniHeapBitmap.isSet(i) &&
+        (ptr = checkWhereNot(getObject(i),
+                             ObjectSize,
+                             SuperHeap::_freedValue)) != NULL) {
+      register_missing_canary(ptr);
+    }
+  }
 
   void activate() {
     if (!SuperHeap::_isHeapActivated) {
