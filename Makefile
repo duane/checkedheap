@@ -1,7 +1,7 @@
 INCLUDES=-Iinclude -IHeap-Layers
 DEBUG ?= -g
 OPT ?= -O0 $(DEBUG)
-CFLAGS=-Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror $(OPT) -malign-double -finline-functions -ffast-math -fomit-frame-pointer -D_REENTRANT=1 -pipe $(INCLUDES) -fPIC
+CFLAGS=-Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror $(OPT) -finline-functions -ffast-math -fomit-frame-pointer -D_REENTRANT=1 -pipe $(INCLUDES) -fPIC
 CXXFLAGS=$(CFLAGS) -fno-rtti
 LDFLAGS=
 
@@ -20,7 +20,7 @@ SRCS += Heap-Layers/wrappers/macwrapper.cpp
 else ifeq ($(OS), Linux)
 CC=clang
 CXX=clang++
-CXXFLAGS += -march=core2
+CXXFLAGS += -march=core2 -malign-double
 CXXFLAGS += -Wno-deprecated-declarations # for __malloc_hook and friends
 LDFLAGS += -shared -Bsymbolic -ldl
 LIBEXT=so
@@ -43,7 +43,10 @@ test:
 	test/run_all.sh
 
 clean:
-	rm -f $(LIBPATH) $(SUBLIBPATH)
+	rm -f $(LIBPATH) $(STUBLIBPATH)
+ifeq ($(OS), Darwin)
+	rm -rf $(LIBPATH).dSYM/ $(STUBLIBPATH).dSYM/
+endif
 	make clean -C test
 
 .PHONY: test
