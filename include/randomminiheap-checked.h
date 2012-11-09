@@ -56,6 +56,13 @@ class RandomMiniCheckedHeap :
     return remainingSize;
   }
 
+  void* malloc(size_t sz) {
+    void* ptr = SuperHeap::malloc(sz);
+    if (ptr == NULL) return NULL;
+    ptrdiff_t index = (static_cast<char*>(ptr) - _miniHeap) / ObjectSize;
+    validate_object(index);
+    return ptr;
+  }
 
   bool free (void * ptr) {
     if (SuperHeap::free(ptr)) {
@@ -71,7 +78,27 @@ class RandomMiniCheckedHeap :
     }
   }
 
+  inline void protect() {
+    int status = mprotect(_miniHeap, ObjectSize * NObjects, PROT_NONE);
+    assert(status == 0 && "failed to mprotect memory.");
+  }
+
+  inline void unprotect() {
+    int status = mprotect(_miniHeap, ObjectSize * NObjects, PROT_READ | PROT_WRITE);
+    assert(status == 0 && "failed to mprotect memory.");
+  }
+
   typedef RandomMiniHeapCore<Numerator, Denominator, ObjectSize, NObjects, Allocator> SuperHeap;
+
+  /// @return true iff the index is valid for this heap.
+  bool inBounds (void * ptr) const {
+    if ((ptr < _miniHeap) || (ptr >= _miniHeap + NObjects * ObjectSize)
+	|| (_miniHeap == NULL)) {
+      return false;
+    } else {
+      return true;
+    }
+  }
 
 protected:
 
@@ -131,19 +158,8 @@ protected:
     return (void *) &((typename SuperHeap::ObjectStruct *) _miniHeap)[index];
   }
 
-  /// @return true iff the index is valid for this heap.
-  bool inBounds (void * ptr) const {
-    if ((ptr < _miniHeap) || (ptr >= _miniHeap + NObjects * ObjectSize)
-	|| (_miniHeap == NULL)) {
-      return false;
-    } else {
-      return true;
-    }
-  }
-
   /// The heap pointer.
   char * _miniHeap;
-
 };
 
 

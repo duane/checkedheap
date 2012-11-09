@@ -19,6 +19,7 @@ using namespace HL;
 #include <mmapalloc.h>
 #include <rng/randomnumbergenerator.h>
 #include <static/staticlog.h>
+#include <util/bitmap.h>
 
 template <int Numerator, int Denominator>
 class RandomHeapBase {
@@ -30,6 +31,8 @@ public:
   virtual bool free (void *) = 0;
   virtual size_t getSize (void *) const = 0;
   virtual void validate() = 0;
+  virtual bool register_access(void*) = 0;
+  virtual void reset_access() = 0;
 };
 
 template <int Numerator,
@@ -92,6 +95,8 @@ public:
     ::new ((char *) _buf)
 	MiniHeapType<MIN_OBJECTS> ();
     StaticForLoop<1, MAX_MINIHEAPS-1, Initializer, char *>::run ((char *) _buf);
+
+    _accessMap.clear();
   }
 
 
@@ -116,6 +121,18 @@ public:
     return ptr;
   }
 
+  // MUST be reentrant. NO allocation or I/O.
+  inline bool register_access(void* ptr) {
+    for (unsigned int i = 0; i < _miniHeapsInUse; ++i) {
+      if (getMiniHeap(i)->inBounds(ptr)) {
+        if (_accessMap.tryToSet(i)) {
+          getMiniHeap(i)->unprotect();
+        }
+        return true;
+      }
+    }
+    return false;
+  }
 
   inline bool free (void * ptr) {
     Check<RandomCheckedHeap *> sanity (this);
@@ -162,9 +179,19 @@ public:
 
   inline void validate() {
     for (size_t i = 0; i < _miniHeapsInUse; ++i) {
-      getMiniHeap(i)->validate();
+      if (_accessMap.isSet(i)) {
+        getMiniHeap(i)->validate();
+      }
     }
-  }    
+  }
+
+  inline void reset_access() {
+    for (unsigned int i = 0; i < _miniHeapsInUse; ++i) {
+      if (_accessMap.reset(i)) {
+        getMiniHeap(i)->protect();
+      }
+    }
+  }
 
 private:
 
@@ -235,8 +262,6 @@ private:
 
   // Activate another mini heap to satisfy the current memory requests.
   NO_INLINE void getAnotherMiniHeap (void) {
-
-    
     Check<RandomCheckedHeap *> sanity (this);
     if (_miniHeapsInUse < MAX_MINIHEAPS) {
       // Update the amount of available space.
@@ -247,6 +272,8 @@ private:
       }
       // Activate the new mini heap.
       getMiniHeap(_miniHeapsInUse)->activate();
+      // protect it to trigger initial access registration.
+      getMiniHeap(_miniHeapsInUse)->protect();
       // Update the number of mini heaps in use (one more).
       _miniHeapsInUse++;
       // Update the number of chunks in use (multiples of MIN_OBJECTS) minus 1.
@@ -256,7 +283,6 @@ private:
       assert (((_chunksInUse + 1) & _chunksInUse) == 0);
     }
     check();
-
   }
      
   /// Local random source.
@@ -281,6 +307,8 @@ private:
 
   size_t _check2;
 
+  // access bitmap
+  StaticBitMap<MAX_MINIHEAPS> _accessMap;
 };
 
 #endif

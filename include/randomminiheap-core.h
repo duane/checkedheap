@@ -13,6 +13,8 @@ public:
   virtual size_t getSize (void *) = 0;
   virtual void activate (void) = 0;
   virtual void validate (void) = 0;
+  virtual void protect(void) = 0;
+  virtual void unprotect(void) = 0;
   virtual ~RandomMiniHeapBase () {}
 };
 
@@ -133,6 +135,9 @@ public:
 
   /// @brief Activates the heap, making it ready for allocations.
   virtual void activate() = 0;
+  
+  /// @return true iff the index is valid for this heap.
+  virtual bool inBounds (void * ptr) const = 0;
 
 protected:
 
@@ -146,8 +151,6 @@ protected:
   /// @return the index corresponding to the given object.
   virtual unsigned int computeIndex (void * ptr) const = 0;
 
-  /// @return true iff the index is valid for this heap.
-  virtual bool inBounds (void * ptr) const = 0;
 
   /// @return true iff heap is currently active.
   inline bool isActivated (void) const {

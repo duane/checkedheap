@@ -70,11 +70,25 @@ public:
     // 2*Alignment, etc. See the Initializer class
     // below.
     StaticForLoop<0, MAX_INDEX, Initializer, void *>::run ((void *) _buf);
+
+    // Initialize bitmap access.
+    _accessMap.clear();
   }
 
   inline void validate() {
+    // Only validate those heaps who have been accessed.
     for (int i = 0; i < MAX_INDEX; ++i) {
-      getHeap(i)->validate();
+      if (_accessMap.isSet(i)) {
+        getHeap(i)->validate();
+      }
+    }
+  }
+
+  inline void reset_access() {
+    for (int i = 0; i < MAX_INDEX; ++i) {
+      if (_accessMap.reset(i)) {
+        getHeap(i)->reset_access();
+      }
     }
   }
   
@@ -105,6 +119,18 @@ public:
     
     assert (((size_t) ptr % Alignment) == 0);
     return ptr;
+  }
+
+  // MUST be reentrant - called from signal handler.
+  // Returns true if handled, false if not
+  inline bool register_access(void *ptr) {
+    for (int i = 0; i < MAX_INDEX; ++i) {
+      if (getHeap(i)->register_access(ptr)) {
+        _accessMap.tryToSet(i);
+        return true;
+      }
+    }
+    return false;
   }
   
   
@@ -222,6 +248,8 @@ private:
   // The buffer that holds each RandomHeap.
   char _buf[MINIHEAPSIZE * MAX_INDEX];
 
+  // Access map for each random heap.
+  StaticBitMap<MAX_INDEX> _accessMap;
 };
 
 #endif
