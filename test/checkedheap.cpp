@@ -6,15 +6,13 @@
 #include <heaps/utility/oneheap.h>
 #include <wrappers/ansiwrapper.h>
 
-#include <c/check_heap.h>
-
 using namespace HL;
 
 enum { Scale = 4,
        PageSize = 4096,
        HeapSize = 1 << 30 /* 1 gigabyte */ };
 
-typedef ProtectedPageAllocator<MmapAlloc /* parent */,
+typedef ProtectedPageAllocator<MmapAlloc,
                                Scale,
                                PageSize,
                                HeapSize> RegionHeap;
@@ -67,8 +65,27 @@ extern "C" {
     getCustomHeap()->unlock();
   }
 
-  void check_heap() {
-    //getCustomHeap()->getSmallHeap().validate();
-    //getCustomHeap()->getSmallHeap().reset_access();
+  void check_heap(bool verbose) {
+    getCustomHeap()->getInstance().validate(verbose);
   }
+}
+
+
+int main(int argc, char **argv) {
+  check_heap(false);
+  const size_t num_allocs = 10;
+  const size_t alloc_size = PageSize;
+  void** ptrs = static_cast<void**>(malloc(sizeof(void*) * num_allocs));
+  for (size_t i = 0; i < num_allocs; ++i) {
+    printf("Malloc %zu\n", i);
+    ptrs[i] = xxmalloc(alloc_size);
+    check_heap(false);
+  }
+  for (size_t i = 0; i < num_allocs; ++i) {
+    printf("Free %zu\n", i);
+    xxfree(ptrs[i]);
+    check_heap(false);
+  }
+  check_heap(true);
+  return 0;
 }
