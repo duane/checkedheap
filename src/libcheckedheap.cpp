@@ -1,26 +1,18 @@
-#include <regionheap.h>
+#include <checkheap2.h>
 #include <mmapalloc.h>
 
 #include <locks/posixlock.h>
 #include <heaps/threads/lockedheap.h>
 #include <heaps/utility/oneheap.h>
 #include <wrappers/ansiwrapper.h>
-
-#include <c/check_heap.h>
+#include <wrappers/mallocinfo.h>
 
 using namespace HL;
 
-enum { Scale = 4,
-       PageSize = 4096,
-       HeapSize = 1 << 30 /* 1 gigabyte */ };
-
-typedef ProtectedPageAllocator<MmapAlloc /* parent */,
-                               Scale,
-                               PageSize,
-                               HeapSize> RegionHeap;
+enum { PageSize = 4096 };
 
 typedef ANSIWrapper<
-  LockedHeap<PosixLockType, OneHeap<RegionHeap> > > TheCheckedHeap;
+  LockedHeap<PosixLockType, CheckedHeap<MmapAlloc, PageSize> > > TheCheckedHeap;
 
 class TheCustomHeapType : public TheCheckedHeap {};
 
@@ -67,8 +59,8 @@ extern "C" {
     getCustomHeap()->unlock();
   }
 
-  void check_heap() {
-    //getCustomHeap()->getSmallHeap().validate();
-    //getCustomHeap()->getSmallHeap().reset_access();
+  void check_heap(void) {
+    getCustomHeap()->validate();
   }
 }
+

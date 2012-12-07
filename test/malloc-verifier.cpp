@@ -22,6 +22,7 @@
 using namespace std;
 
 #include "../include/rng/mwc.h"
+#include <c/check_heap.h>
 
 
 unsigned long numIterations = 1000;
@@ -136,8 +137,11 @@ private:
 	objectSize[index]  = malloc_usable_size(objectMap[index]);
 #endif
 
-	if (objectSize[index] < sz)
+	if (objectSize[index] < sz) {
+    printf("malloc_size(new char[%zu]) = %zu.\n", sz, malloc_size(objectMap[index]));
+    printf("malloc_good_size(%zu) = %zu.\n",malloc_size(objectMap[index]), objectSize[index]);
 	  abort();
+  }
 
 	objectsAllocated++;
 	memoryAllocated += objectSize[index];
@@ -256,6 +260,8 @@ main (int argc, char * argv[])
   for (int i = 0; i < numThreads; i++) {
     pthread_join (t[i], NULL);
   }
+
+  check_heap();
 
   return 0;
 }

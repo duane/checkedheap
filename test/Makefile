@@ -4,7 +4,7 @@ CXX=clang++
 
 CFLAGS=-g -O0 -Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror -I../DieHard/src/replicated
 CXXFLAGS=$(CFLAGS)
-LDFLAGS=-L.. -lpthread
+LDFLAGS=-L.. -lcheckedheapstub -lpthread
 
 PWD := $(shell pwd)
 LIBDIR := $(shell cd ..; pwd)
@@ -37,7 +37,7 @@ illegalread: illegalread.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
 
 malloc-verifier: malloc-verifier.cpp
-	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS) -lpthread
+	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS) -lpthread -I../include
 
 nheap: nheap.cpp
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS) -I../include -I../Heap-Layers

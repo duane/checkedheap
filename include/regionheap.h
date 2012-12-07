@@ -1,9 +1,6 @@
 #ifndef __INCLUDE_REGIONHEAP_H__
 #define __INCLUDE_REGIONHEAP_H__
 
-#define MAP_ALIGN 1
-#define MAP_ANON 1
-
 #include <cassert>
 #include <cstdio>
 #include <errno.h>
@@ -73,8 +70,9 @@ class ProtectedPageAllocator : SourceHeap {
   }
 
   inline void* malloc(size_t sz) {
+
     // Raise sz to the nearest page.
-    sz = ((sz + (PageSize - 1)) & -PageSize);
+    sz = ((sz + (PageSize - 1)) & -PageSize) / PageSize;
 
     // Now start at its natural bin and go upwards until we find a bin.
     Page* chunk = NULL;
@@ -133,7 +131,7 @@ class ProtectedPageAllocator : SourceHeap {
     void* allocated = static_cast<void*>(chunk + 1);
     chunk->obj.chunks = sz;
     ObjectHeader::protect(&(chunk->obj));
-    //mprotect_or_die(allocated, sz * PageSize, PROT_NONE);
+    mprotect_or_die(allocated, sz * PageSize, PROT_READ | PROT_WRITE);
     return allocated;
   }
 
@@ -201,7 +199,8 @@ class ProtectedPageAllocator : SourceHeap {
     return page->obj.chunks * PageSize;
   }
 
-  inline bool validate(bool verbose) {
+  inline bool validate() {
+    bool verbose = false;
     Page* node = _heap;
     size_t free = 0;
     size_t allocated = 0;
@@ -222,8 +221,6 @@ class ProtectedPageAllocator : SourceHeap {
         assert(delta > 0);
         assert((size_t)delta % PageSize == 0);
         size_t num = (node->obj.chunks + 1) * PageSize;
-        if ((size_t) delta != num)
-          printf("delta: %d, expected: %zu.\n", delta, num);
         assert((size_t)delta == num);
       }
       prev = node;
@@ -419,6 +416,9 @@ class ProtectedPageAllocator : SourceHeap {
 
   inline void rebin(ObjectHeader* obj) {
     assert(obj->free && "attempted to rebin an allocated object.");
+    // we use this point to mprotect away obj.
+    Page* page = reinterpret_cast<Page*>(obj) + 1;
+    mprotect_or_die(static_cast<void*>(page), PageSize * obj->chunks, PROT_NONE);
     size_t bin_idx = binForSize(obj->chunks);
     _bins[bin_idx].append(obj);
   }

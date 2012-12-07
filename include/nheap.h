@@ -7,16 +7,7 @@
 #include <util/bitmap.h>
 #include <util/queue.h>
 
-template <class    RegionHeap,
-          typename CanaryType,
-          size_t   PageSize,
-          size_t   GuardSize,
-          size_t   QuarantineSize,
-          bool     ValidateOnMalloc>
-class LargeNHeap : RegionHeap {
- public:
-  PHeap
-};
+
 
 template <class    RegionHeap,
           typename CanaryType,
@@ -28,11 +19,12 @@ template <class    RegionHeap,
 class NHeap : RegionHeap {
  public:
   NHeap() : _canary(RealRandomValue::value()),
-            _heap(static_cast<uint8_t*>(RegionHeap::malloc(HeapSize))) {
+            _heap(static_cast<uint8_t*>(RegionHeap::malloc(HeapSize))),
+            _free(NUM_OBJECTS) {
     assert(_heap != NULL && "Region allocator failed to allocated more memory.");
 
     // Initialize the entire heap to freed.
-    canaryFill(static_cast<CanaryType*>(_heap), HeapSize / CANARY_SIZE);
+    canaryFill(reinterpret_cast<CanaryType*>(_heap), HeapSize / CANARY_SIZE);
     _freeBitmap.clear();
   }
 
@@ -45,11 +37,13 @@ class NHeap : RegionHeap {
       return NULL;
     }
 
-    void* ptr = NULL;
-    for (int i = 0; i < NUM_OBJECTS; ++i) {
-      if (_freeBitmap.tryToSet(i)) {
-        // actually allocate.
-        return pre_alloc(i);
+    if (_free > 0) {
+      void* ptr = NULL;
+      for (int i = 0; i < NUM_OBJECTS; ++i) {
+        if (_freeBitmap.tryToSet(i)) {
+          // actually allocate.
+          return pre_alloc(i);
+        }
       }
     }
 
@@ -74,29 +68,29 @@ class NHeap : RegionHeap {
     }
 
     // Canary the allocated memory.
-    ptr = getObject(idx);
-    fill_canary(static_cast<CanaryType*>(ptr), ALLOC_CANARIES);
+    canaryFill(reinterpret_cast<CanaryType*>(ptr), ALLOC_CANARIES);
 
     // Add it to the quarantine, possibly permanently freeing an older
     // object.
     size_t invalidated_idx;
-    if (_quarantine.enqueue(idx, &invalidated_idx)) {
-      _freeBitmap.clear(invalidated_idx);
+    if (_quarantine.queue(idx, &invalidated_idx)) {
+      _free += 1;
+      _freeBitmap.reset(invalidated_idx);
     }
     return true;
   }
 
-  inline size_t getSize(void* ptr) const {
+  inline size_t getSize(void* ptr) {
     ssize_t idx = getIndex(ptr);
     if (idx < 0) {
       return 0;
     }
+    const size_t n = AllocSize;
 
-    return AllocSize - (static_cast<uint8_t*>(ptr) %
-                        getAlloc(static_cast<size_t>(idx)));
+    return AllocSize;
   }
 
-  inline void validate(void) const {
+  inline void validate(void) {
     // Freed memory.
     for (int i = 0; i < NUM_OBJECTS; ++i) {
       if (!_freeBitmap.isSet(i)) {
@@ -105,74 +99,87 @@ class NHeap : RegionHeap {
     }
 
     // Quarantined memory.
-    for (int i = 0; i < _quarantine.size(); ++i) {
+    for (size_t i = 0; i < _quarantine.size(); ++i) {
       checkObject(_quarantine[i]);
     }
 
     // And the last canaries.
     size_t offset = NUM_OBJECTS + OBJECT_CANARIES;
-    canaryCheck(static_cast<CanaryType*>(_heap) + offset, HEAP_CANARIES - offset);
+    canaryCheck(reinterpret_cast<CanaryType*>(_heap) + offset, HEAP_CANARIES - offset);
   }
 
+  inline bool can_allocate(void) {
+    if (_quarantine.size() > 0) {
+      return true;
+    }
+    return _free > 0;
+  }
+
+  inline bool can_be_freed(void) {
+    return _free == NUM_OBJECTS;
+  }
  private:
   // returns -1 if the pointer is not in the heap.
   // Otherwise, returns the object index for the pointer.
-  inline ssize_t getIndex(void* ptr) const {
-    if (ptr < _heap || ptr >= _heap + HeapSize) {
+  inline ssize_t getIndex(void* ptr) {
+    uint8_t* object = static_cast<uint8_t*>(ptr);
+    if (object < _heap || object >= (_heap + HeapSize)) {
       return -1;
     }
-    return (static_cast<uint8_t*>(ptr) - _heap) % OBJECT_SIZE;
+    size_t offset = static_cast<size_t>(object - _heap);
+    return offset / OBJECT_SIZE;
   }
 
-  inline void* getGuard(size_t i) const {
+  inline void* getGuard(size_t i) {
     return static_cast<void*>(_heap + i * OBJECT_SIZE);
   }
 
-  inline void* getObject(size_t i) const {
+  inline void* getObject(size_t i) {
     return getGuard(i);
   }
 
-  inline void* getAlloc(size_t i) const {
-    return getObject(i) + GuardSize;
+  inline void* getAlloc(size_t i) {
+    return static_cast<void*>(static_cast<char*>(getObject(i)) + GuardSize);
   }
 
-  inline void canary_error(void* ptr) const {
+  inline void canary_error(void* ptr) {
     fprintf(stderr, "Bad canary at %p.\n", ptr);
     fflush(stderr);
     exit(SIGSEGV);
   }
 
-  inline void double_free(void* ptr) const {
+  inline void double_free(void* ptr) {
     fprintf(stderr, "Double free at %p.\n", ptr);
     fflush(stderr);
     exit(SIGSEGV);
   }
 
   // checks for `len` canaries of length sizeof(CanaryType) at `buf`.
-  inline void canaryCheck(const CanaryType* buf, size_t len) const {
+  inline void canaryCheck(CanaryType* buf, size_t len) {
     for (size_t i = 0; i < len; ++i) {
       if (buf[i] == _canary) {
         continue;
       }
-      canary_error(static_cast<void*>(buf + len));
+      canary_error(reinterpret_cast<void*>(buf + len));
     }
   }
 
-  inline void checkObject(size_t i) const {
-    check_canary(static_cast<CanaryType*>(getObject(i)),
-                 OBJECT_CANARIES);
+  inline void checkObject(size_t i) {
+    canaryCheck(static_cast<CanaryType*>(getObject(i)),
+                OBJECT_CANARIES);
   }
 
-  inline void canaryFill(CanaryType* buf, size_t len) const {
+  inline void canaryFill(CanaryType* buf, size_t len) {
     for (size_t i = 0; i < len; ++i) {
       buf[i] = _canary;
     }
   }
 
-  inline void* pre_alloc(size_t i) const {
+  inline void* pre_alloc(size_t i) {
     if (ValidateOnMalloc) {
       checkObject(i);
     }
+    _free -= 1;
     return getAlloc(i);
   }
   
@@ -194,6 +201,7 @@ class NHeap : RegionHeap {
   StaticQueue<size_t, QuarantineSize> _quarantine;
 
   uint8_t* _heap;
+  size_t _free;
 };
           
 

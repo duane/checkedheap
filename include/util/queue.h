@@ -13,11 +13,14 @@ class StaticQueue {
 
   // 
   inline bool queue(Element ele, Element* invalidated) {
+    bool full = false;
     if (_size >= N) { // we are overwriting an element.
-      *invalidated = _elements[N];
+      *invalidated = _elements[_head];
+      full = true;
     }
     _elements[_head] = ele;
     _head = (_head + 1) % N;
+    return full;
   }
 
   // Returns the oldest element in the queue, removing it
