@@ -25,7 +25,7 @@ class CheckedHeap {
   inline void* malloc(size_t sz) {
     if (sz == 0)
       return NULL;
-    // round up to nearest power of two if necessary.
+    // round up to nearest power of two.
     size_t log_sz = (size_t)log2(sz);
     sz = 1 << (log_sz);
     if (sz > MAX_SIZE) {

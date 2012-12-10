@@ -104,7 +104,7 @@ class NHeap : RegionHeap {
     }
 
     // And the last canaries.
-    size_t offset = NUM_OBJECTS + OBJECT_CANARIES;
+    size_t offset = NUM_OBJECTS * OBJECT_CANARIES;
     canaryCheck(reinterpret_cast<CanaryType*>(_heap) + offset, HEAP_CANARIES - offset);
   }
 

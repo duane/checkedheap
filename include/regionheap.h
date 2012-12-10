@@ -207,7 +207,8 @@ class ProtectedPageAllocator : SourceHeap {
     size_t total_size = 0;
     Page* prev = NULL;
     while (true) {
-      if (node->obj.free) {
+      if (node->obj.free &&
+          node->obj.chunks > 0) {
         free += 1;
       } else {
         allocated += 1;
@@ -419,8 +420,10 @@ class ProtectedPageAllocator : SourceHeap {
     // we use this point to mprotect away obj.
     Page* page = reinterpret_cast<Page*>(obj) + 1;
     mprotect_or_die(static_cast<void*>(page), PageSize * obj->chunks, PROT_NONE);
-    size_t bin_idx = binForSize(obj->chunks);
-    _bins[bin_idx].append(obj);
+    if (obj->chunks > 0) {
+      size_t bin_idx = binForSize(obj->chunks);
+      _bins[bin_idx].append(obj);
+    }
   }
   
   size_t _size;
