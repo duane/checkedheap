@@ -45,6 +45,10 @@ class ProtectedPageAllocator : SourceHeap {
 
   ~ProtectedPageAllocator() {}
 
+  inline bool handle_write(void* ptr) {
+
+  }
+
   inline void print(void) {
     printf("Heap spans from %p to %p.\n", _heap, _heap + _size);
     printf("Size of %zu pages (%zu bytes).\n", _size, _size * PageSize);
@@ -143,7 +147,7 @@ class ProtectedPageAllocator : SourceHeap {
     Page* chunk = static_cast<Page*>(ptr) - 1;
 
     if (chunk->obj.free) {
-      fprintf(stderr, "Double free at %p.\n", ptr);
+      fprintf(stderr, "Double free (page allocator) at %p.\n", ptr);
       return false;
     }
 
@@ -363,7 +367,7 @@ class ProtectedPageAllocator : SourceHeap {
     // cheap ways to find bad pointers.
     uintptr_t ptr_num = reinterpret_cast<uintptr_t>(ptr);
     if (ptr_num % PageSize != 0) {
-      fprintf(stderr, "Attempted to free unaligned (to page boundary) pointer at %p\n.", ptr);
+      fprintf(stderr, "Attempted to manipulate unaligned (to page boundary) pointer at %p.\n", ptr);
       return false;
     }
 

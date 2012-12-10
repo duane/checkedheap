@@ -22,6 +22,27 @@ class CheckedHeap {
     StaticForLoop<MIN_INDEX, NUM_TINY_HEAPS, HeapListInitializer, char*>::run(_heaps);
   }
 
+  inline void protect(void) {
+    for (int i = MIN_INDEX; i < NUM_TINY_HEAPS; ++i) {
+      get_heap(i)->protect();
+    }
+  }
+
+  inline void unprotect(void) {
+    for (int i = MIN_INDEX; i < NUM_TINY_HEAPS; ++i) {
+      get_heap(i)->unprotect();
+    }
+  }
+
+  inline bool handle_write(void* ptr) {
+    for (int i = MIN_INDEX; i < NUM_TINY_HEAPS; ++i) {
+      if (get_heap(i)->handle_write(ptr)) {
+        return true;
+      }
+    }
+    return _region_heap.handle_write(ptr);
+  }
+
   inline void* malloc(size_t sz) {
     if (sz == 0)
       return NULL;
@@ -89,6 +110,34 @@ class CheckedHeap {
     NHeapList() {}
     ~NHeapList() {}
 
+    inline void protect(void) {
+      for (typename List::iterator iter = _heaps.begin();
+           iter != _heaps.end();
+           ++iter) {
+        TinyNHeap* heap = *iter;
+        heap->protect();
+      }
+    }
+
+    inline void unprotect(void) {
+      for (typename List::iterator iter = _heaps.begin();
+           iter != _heaps.end();
+           ++iter) {
+        TinyNHeap* heap = *iter;
+        heap->unprotect();
+      }
+    }
+
+    inline bool handle_write(void* ptr) {
+      for (typename List::iterator iter = _heaps.begin();
+           iter != _heaps.end();
+           ++iter) {
+        TinyNHeap* heap = *iter;
+        if (heap->handle_write(ptr)) return true;
+      }
+      return false;
+    }
+
     inline void* malloc(size_t sz) {
       assert(sz == AllocSize);
       for (typename List::iterator iter = _heaps.begin();
@@ -146,6 +195,7 @@ class CheckedHeap {
     typedef NHeap<RegionHeap,
                   CanaryType,
                   PageSize * 16,
+                  PageSize,
                   AllocSize,
                   GUARD_SIZE,
                   MAX_QUARANTINE_SIZE,

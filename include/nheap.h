@@ -12,6 +12,7 @@
 template <class    RegionHeap,
           typename CanaryType,
           size_t   HeapSize,
+          size_t   PageSize,
           size_t   AllocSize,
           size_t   GuardSize,
           size_t   QuarantineSize,
@@ -19,17 +20,33 @@ template <class    RegionHeap,
 class NHeap : RegionHeap {
  public:
   NHeap() : _canary(RealRandomValue::value()),
-            _heap(static_cast<uint8_t*>(RegionHeap::malloc(HeapSize))),
-            _free(NUM_OBJECTS) {
+            _heap(static_cast<uint8_t*>(RegionHeap::malloc(HeapSize))) {
     assert(_heap != NULL && "Region allocator failed to allocated more memory.");
 
     // Initialize the entire heap to freed.
     canaryFill(reinterpret_cast<CanaryType*>(_heap), HeapSize / CANARY_SIZE);
-    _freeBitmap.clear();
+    for (uint32_t i = 0; i < NUM_OBJECTS; ++i) {
+      uint32_t tmp;
+      bool status = _free.queue(i, &tmp);
+      assert(status == false);
+    }
+    _free_bitmap.clear();
   }
 
   ~NHeap() {
-    RegionHeap::free();
+    RegionHeap::free(_heap);
+  }
+
+  inline void protect(void) {
+
+  }
+
+  inline void unprotect(void) {
+
+  }
+
+  inline bool handle_write(void* ptr) {
+
   }
 
   inline void* malloc(size_t sz) {
@@ -37,22 +54,16 @@ class NHeap : RegionHeap {
       return NULL;
     }
 
-    if (_free > 0) {
-      void* ptr = NULL;
-      for (int i = 0; i < NUM_OBJECTS; ++i) {
-        if (_freeBitmap.tryToSet(i)) {
-          // actually allocate.
-          return pre_alloc(i);
-        }
-      }
+    if (_free.size() > 0) {
+      return pre_alloc(_free.dequeue());
     }
 
     // ok, we're out of freed objects. Time to look at the quarantine.
-    if (_quarantine.size() == 0) {
-      // Out of memory.
-      return NULL;
+    if (_quarantine.size() > 0) {
+      return pre_alloc(_quarantine.dequeue());
     }
-    return pre_alloc(_quarantine.dequeue());
+
+    return NULL;
   }
 
   inline bool free(void* ptr) {
@@ -63,7 +74,7 @@ class NHeap : RegionHeap {
 
     const size_t idx = static_cast<size_t>(signed_idx);
 
-    if (!_freeBitmap.isSet(idx)) {
+    if (!_free_bitmap.isSet(idx)) {
       double_free(ptr);
     }
 
@@ -72,10 +83,11 @@ class NHeap : RegionHeap {
 
     // Add it to the quarantine, possibly permanently freeing an older
     // object.
-    size_t invalidated_idx;
+    uint32_t invalidated_idx = 0;
     if (_quarantine.queue(idx, &invalidated_idx)) {
-      _free += 1;
-      _freeBitmap.reset(invalidated_idx);
+      _free_bitmap.reset(invalidated_idx);
+      bool invalidated = _free.queue(invalidated_idx, &invalidated_idx);
+      assert(invalidated == false);
     }
     return true;
   }
@@ -92,10 +104,8 @@ class NHeap : RegionHeap {
 
   inline void validate(void) {
     // Freed memory.
-    for (int i = 0; i < NUM_OBJECTS; ++i) {
-      if (!_freeBitmap.isSet(i)) {
-        checkObject(i);
-      }
+    for (size_t i = 0; i < _free.size(); ++i) {
+      checkObject(_free[i]);
     }
 
     // Quarantined memory.
@@ -112,21 +122,22 @@ class NHeap : RegionHeap {
     if (_quarantine.size() > 0) {
       return true;
     }
-    return _free > 0;
+    return _free.size() > 0;
   }
 
   inline bool can_be_freed(void) {
-    return _free == NUM_OBJECTS;
+    return (_free.size() + _quarantine.size()) == NUM_OBJECTS;
   }
  private:
   // returns -1 if the pointer is not in the heap.
   // Otherwise, returns the object index for the pointer.
   inline ssize_t getIndex(void* ptr) {
-    uint8_t* object = static_cast<uint8_t*>(ptr);
-    if (object < _heap || object >= (_heap + HeapSize)) {
+    uintptr_t object = reinterpret_cast<uintptr_t>(ptr);
+    uintptr_t heap = reinterpret_cast<uintptr_t>(_heap);
+    if (object < heap || object >= (heap + HeapSize)) {
       return -1;
     }
-    size_t offset = static_cast<size_t>(object - _heap);
+    size_t offset = object - heap;
     return offset / OBJECT_SIZE;
   }
 
@@ -179,7 +190,7 @@ class NHeap : RegionHeap {
     if (ValidateOnMalloc) {
       checkObject(i);
     }
-    _free -= 1;
+    _free_bitmap.tryToSet(i);
     return getAlloc(i);
   }
   
@@ -194,14 +205,13 @@ class NHeap : RegionHeap {
   // Leave enough room at the end for a last guard section.
   enum { NUM_OBJECTS = (HeapSize - GuardSize) / OBJECT_SIZE};
 
-  // Object i is available to be allocated iff the ith bit is 0.
-  StaticBitMap<NUM_OBJECTS> _freeBitmap;
-
   // Keeps track of objects currently in quarantine.
-  StaticQueue<size_t, QuarantineSize> _quarantine;
+  StaticQueue<uint32_t, QuarantineSize> _quarantine;
+  StaticQueue<uint32_t, NUM_OBJECTS> _free;
+
+  StaticBitMap<NUM_OBJECTS> _free_bitmap;
 
   uint8_t* _heap;
-  size_t _free;
 };
           
 

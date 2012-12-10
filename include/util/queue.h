@@ -17,6 +17,8 @@ class StaticQueue {
     if (_size >= N) { // we are overwriting an element.
       *invalidated = _elements[_head];
       full = true;
+    } else {
+      _size += 1;
     }
     _elements[_head] = ele;
     _head = (_head + 1) % N;
