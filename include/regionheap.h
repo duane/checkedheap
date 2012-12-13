@@ -23,6 +23,10 @@ class ProtectedPageAllocator : SourceHeap {
 
   ProtectedPageAllocator() {
     _heap = static_cast<Page*>(SourceHeap::malloc(HeapSize));
+    // initialize bins.
+    for (int i = 0; i < NUM_BINS_TOTAL; ++i) {
+      Bin* bin = new (&_bins[i]) Bin;
+    }
 
     // round up to the nearest page
     uintptr_t heap_addr = reinterpret_cast<size_t>(_heap);
@@ -367,15 +371,11 @@ class ProtectedPageAllocator : SourceHeap {
     // cheap ways to find bad pointers.
     uintptr_t ptr_num = reinterpret_cast<uintptr_t>(ptr);
     if (ptr_num % PageSize != 0) {
-      fprintf(stderr, "Attempted to manipulate unaligned (to page boundary) pointer at %p.\n", ptr);
-      fflush(stderr);
       return false;
     }
 
     if (ptr < _heap
         || ptr_num - reinterpret_cast<uintptr_t>(_heap) > _size * PageSize) {
-      fprintf(stderr, "Attempted to free memory outside of heap: %p.\n", ptr);
-      fflush(stderr);
       return false;
     }
     return true;
@@ -428,8 +428,14 @@ class ProtectedPageAllocator : SourceHeap {
     mprotect_or_die(static_cast<void*>(page), PageSize * obj->chunks, PROT_NONE);
     if (obj->chunks > 0) {
       size_t bin_idx = binForSize(obj->chunks);
+      assert(bin_idx < NUM_BINS_TOTAL);
       _bins[bin_idx].append(obj);
+    } else {
+      obj->bin_prev = obj->bin_next = NULL;
+      obj->bin = NULL;
     }
+    assert((uintptr_t)obj->bin_prev % 16 == 0);
+    assert((uintptr_t)obj->bin_next % 16 == 0);
   }
   
   size_t _size;

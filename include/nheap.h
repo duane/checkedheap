@@ -3,6 +3,7 @@
 
 #include <heaplayers.h>
 
+#include <malloc_error.h>
 #include <rng/realrandomvalue.h>
 #include <util/bitmap.h>
 #include <util/queue.h>
@@ -75,8 +76,9 @@ class NHeap : RegionHeap {
 
     const size_t idx = static_cast<size_t>(signed_idx);
 
-    if (!_free_bitmap.isSet(idx)) {
-      double_free(ptr);
+    if (!_free_bitmap.isSet(idx) ||
+        _quarantine_bitmap.isSet(idx)) {
+      unallocated_free(ptr);
     }
 
     // Canary the allocated memory.
@@ -113,14 +115,16 @@ class NHeap : RegionHeap {
   inline void validate(void) {
     // Freed memory.
     for (size_t i = 0; i < _free.size(); ++i) {
-      assert(!_free_bitmap.isSet(i));
-      checkObject(_free[i]);
+      size_t idx = _free[i];
+      assert(!_free_bitmap.isSet(idx));
+      checkObject(idx);
     }
 
     // Quarantined memory.
     for (size_t i = 0; i < _quarantine.size(); ++i) {
-      assert(_quarantine_bitmap.isSet(i));
-      checkObject(_quarantine[i]);
+      size_t idx = _quarantine[i];
+      assert(_quarantine_bitmap.isSet(idx));
+      checkObject(idx);
     }
 
     // And the last canaries.
@@ -163,25 +167,13 @@ class NHeap : RegionHeap {
     return static_cast<void*>(static_cast<char*>(getObject(i)) + GuardSize);
   }
 
-  inline void canary_error(void* ptr) {
-    fprintf(stderr, "Bad canary at %p.\n", ptr);
-    fflush(stderr);
-    exit(SIGSEGV);
-  }
-
-  inline void double_free(void* ptr) {
-    fprintf(stderr, "Double free at %p.\n", ptr);
-    fflush(stderr);
-    exit(SIGSEGV);
-  }
-
   // checks for `len` canaries of length sizeof(CanaryType) at `buf`.
   inline void canaryCheck(CanaryType* buf, size_t len) {
     for (size_t i = 0; i < len; ++i) {
       if (buf[i] == _canary) {
         continue;
       }
-      canary_error(reinterpret_cast<void*>(buf + len));
+      unallocated_access(reinterpret_cast<void*>(buf + len));
     }
   }
 
@@ -225,6 +217,5 @@ class NHeap : RegionHeap {
 
   uint8_t* _heap;
 };
-          
 
 #endif
