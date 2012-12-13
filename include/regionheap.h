@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
+#include <malloc_error.h>
 #include <static/staticlog.h>
 
 // an dl-malloc style allocator
@@ -34,7 +35,7 @@ class ProtectedPageAllocator : SourceHeap {
     _size = (HeapSize - cut) / PageSize;
 
     // mprotect the whole heap to PROT_NONE by default.
-    //mprotect_or_die(static_cast<void*>(_heap), PageSize * _size, PROT_NONE);
+    mprotect_or_die(static_cast<void*>(_heap + 1), PageSize * (_size - 1), PROT_NONE);
   
     // Initialize bins by "allocating" our exact free space.
     _heap->obj.free = true;
@@ -46,7 +47,6 @@ class ProtectedPageAllocator : SourceHeap {
   ~ProtectedPageAllocator() {}
 
   inline bool handle_write(void* ptr) {
-
   }
 
   inline void print(void) {
@@ -74,9 +74,9 @@ class ProtectedPageAllocator : SourceHeap {
   }
 
   inline void* malloc(size_t sz) {
-
     // Raise sz to the nearest page.
     sz = ((sz + (PageSize - 1)) & -PageSize) / PageSize;
+    assert(sz > 0);
 
     // Now start at its natural bin and go upwards until we find a bin.
     Page* chunk = NULL;
@@ -94,13 +94,13 @@ class ProtectedPageAllocator : SourceHeap {
     }
 
     assert(chunk->obj.free && "Found allocated chunk in bin.");
+    assert(chunk->obj.chunks >= sz);
 
     ObjectHeader::unprotect(&(chunk->obj));
     _bins[bin].unlink(&(chunk->obj));
 
     chunk->obj.free = false;
     size_t excess = chunk->obj.chunks - sz;
-    chunk->obj.chunks = sz;
 
     if (excess > 0) {
       Page* page = chunk + (sz + 1);
@@ -134,6 +134,7 @@ class ProtectedPageAllocator : SourceHeap {
 
     void* allocated = static_cast<void*>(chunk + 1);
     chunk->obj.chunks = sz;
+    assert(chunk->obj.chunks > 0);
     ObjectHeader::protect(&(chunk->obj));
     mprotect_or_die(allocated, sz * PageSize, PROT_READ | PROT_WRITE);
     return allocated;
@@ -147,8 +148,7 @@ class ProtectedPageAllocator : SourceHeap {
     Page* chunk = static_cast<Page*>(ptr) - 1;
 
     if (chunk->obj.free) {
-      fprintf(stderr, "Double free (page allocator) at %p.\n", ptr);
-      return false;
+      unallocated_free(ptr);
     }
 
     ObjectHeader::unprotect(&(chunk->obj));
@@ -185,6 +185,7 @@ class ProtectedPageAllocator : SourceHeap {
     rebin(&(chunk->obj));
     ObjectHeader::protect(&(chunk->obj));
     mprotect_or_die(static_cast<void*>(chunk + 1), chunk->obj.chunks * PageSize, PROT_NONE);
+
     return true;
   }
 
@@ -193,13 +194,12 @@ class ProtectedPageAllocator : SourceHeap {
       return 0;
     }
 
-    Page* page = static_cast<Page*>(ptr);
+    Page* page = static_cast<Page*>(ptr) - 1;
 
     if (page->obj.free) {
-      fprintf(stderr, "requesting size of unallocated memory.\n");
       return 0;
     }
-
+    assert(page->obj.chunks > 0);
     return page->obj.chunks * PageSize;
   }
 
@@ -368,12 +368,14 @@ class ProtectedPageAllocator : SourceHeap {
     uintptr_t ptr_num = reinterpret_cast<uintptr_t>(ptr);
     if (ptr_num % PageSize != 0) {
       fprintf(stderr, "Attempted to manipulate unaligned (to page boundary) pointer at %p.\n", ptr);
+      fflush(stderr);
       return false;
     }
 
     if (ptr < _heap
         || ptr_num - reinterpret_cast<uintptr_t>(_heap) > _size * PageSize) {
       fprintf(stderr, "Attempted to free memory outside of heap: %p.\n", ptr);
+      fflush(stderr);
       return false;
     }
     return true;

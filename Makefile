@@ -1,8 +1,10 @@
 INCLUDES=-Iinclude -IHeap-Layers
 DEBUG ?= -g
-OPT ?= -O0 $(DEBUG)
-CFLAGS=-Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror $(OPT) -finline-functions -ffast-math -fomit-frame-pointer -D_REENTRANT=1 -pipe $(INCLUDES) -fPIC
-CXXFLAGS=$(CFLAGS) -fno-rtti
+UNOPT = -O0 $(DEBUG)
+OPT = -O3 $(DEBUG) -DNDEBUG=1
+CFLAGS=-Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror -finline-functions -ffast-math -fomit-frame-pointer -D_REENTRANT=1 -pipe $(INCLUDES) -fPIC
+CXXFLAGS=$(CFLAGS) -fno-rtti $(UNOPT)
+OPTCXXFLAGS=$(CFLAGS) -fno-rtti $(OPT)
 LDFLAGS=
 
 SRCS = src/libcheckedheap.cpp
@@ -32,11 +34,16 @@ STUBLIBPATH = libcheckedheapstub.$(LIBEXT)
 
 all: libcheckedheap libcheckheapstub
 
+opt: libcheckedheapopt libcheckheapstub
+
+libcheckedheapopt:
+	$(CXX) -o $(LIBPATH) $(SRCS) $(OPTCXXFLAGS) $(LDFLAGS)
+
 libcheckedheap:
 	$(CXX) -o $(LIBPATH) $(SRCS)  $(CXXFLAGS) $(LDFLAGS)
 
 libcheckheapstub:
-	$(CC) -o $(STUBLIBPATH) $(STUBSRCS) $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $(STUBLIBPATH) $(STUBSRCS) $(CFLAGS) $(LDFLAGS) $(UNOPT)
 
 test: 
 	make -C test;

@@ -7,9 +7,10 @@
 #include <regionheap.h>
 
 #include <heaps/special/bumpalloc.h>
+#include <malloc_error.h>
+#include <math/log2.h>
 #include <static/staticforloop.h>
 #include <static/staticlog.h>
-#include <math/log2.h>
 #include <wrappers/stlallocator.h>
 
 template <class SourceHeap,
@@ -57,19 +58,27 @@ class CheckedHeap {
 
   inline bool free(void* ptr) {
     for (int i = MIN_INDEX; i < NUM_TINY_HEAPS; ++i) {
-      if (get_heap(i)->free(ptr))
+      if (get_heap(i)->free(ptr)) {
         return true;
+      }
     }
-    return _region_heap.free(ptr);
+
+    if(!_region_heap.free(ptr)) {
+      unallocated_free(ptr);
+    }
+    return true;
   }
 
   inline size_t getSize(void* ptr) {
     for (int i = MIN_INDEX; i < NUM_TINY_HEAPS; ++i) {
-      size_t sz;
-      if ((sz = get_heap(i)->getSize(ptr)) != 0)
-        return sz;
+      size_t result;
+      if (get_heap(i)->getSize(ptr, &result)) {
+        return result;
+      }
     }
-    return _region_heap.getSize(ptr);
+    size_t size = _region_heap.getSize(ptr);
+    assert(size > 0);
+    return size;
   }
 
   inline void validate(void) {
@@ -100,7 +109,7 @@ class CheckedHeap {
    public:
     virtual void* malloc(size_t sz) = 0;
     virtual bool free(void* ptr) = 0;
-    virtual size_t getSize(void* ptr) = 0;
+    virtual bool getSize(void* ptr, size_t* result) = 0;
     virtual void validate(void) = 0;
   };
 
@@ -155,31 +164,19 @@ class CheckedHeap {
     }
 
     inline bool free(void* ptr) {
-      for (typename List::iterator iter = _heaps.begin();
-           iter != _heaps.end();
-           ++iter) {
-        TinyNHeap* heap = *iter;
-        if (heap->free(ptr)) {
-          if (heap->can_be_freed()) {
-            RegionHeap::free(static_cast<void*>(heap));
-            _heaps.erase(iter);
-          }
-          return true;
-        }
-      }
-      return false;
+      TinyNHeap* heap = owning_heap(ptr);
+      if (heap == NULL) return false;
+      return heap->free(ptr);
     }
 
-    inline size_t getSize(void* ptr) {
-      for (typename List::iterator iter = _heaps.begin();
-           iter != _heaps.end();
-           ++iter) {
-        TinyNHeap* heap = *iter;
-        size_t sz = heap->getSize(ptr);
-        if (sz != 0)
-          return sz;
+
+    inline bool getSize(void* ptr, size_t* result) {
+      TinyNHeap* heap = owning_heap(ptr);
+      if (heap != NULL) {
+        *result = heap->getSize(ptr);
+        return true;
       }
-      return 0;
+      return false;
     }
 
     inline void validate(void) {
@@ -200,6 +197,17 @@ class CheckedHeap {
                   GUARD_SIZE,
                   MAX_QUARANTINE_SIZE,
                   false> TinyNHeap;
+
+    inline TinyNHeap* owning_heap(void* ptr) {
+      for (typename List::iterator iter = _heaps.begin();
+           iter != _heaps.end();
+           ++iter) {
+        if ((*iter)->owns(ptr)) {
+          return (*iter);
+        }
+      }
+      return NULL;
+    }
 
     TinyNHeap* getNewHeap(void) {
       TinyNHeap* new_heap = static_cast<TinyNHeap*>(RegionHeap::malloc(sizeof(TinyNHeap)));

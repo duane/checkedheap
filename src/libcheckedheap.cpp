@@ -11,8 +11,7 @@ using namespace HL;
 
 enum { PageSize = 4096 };
 
-typedef ANSIWrapper<
-  LockedHeap<PosixLockType, CheckedHeap<MmapAlloc, PageSize> > > TheCheckedHeap;
+typedef ANSIWrapper<CheckedHeap<MmapAlloc, PageSize> > TheCheckedHeap;
 
 class TheCustomHeapType : public TheCheckedHeap {};
 
@@ -52,11 +51,9 @@ extern "C" {
   }
 
   void xxmalloc_lock() {
-    getCustomHeap()->lock();
   }
 
   void xxmalloc_unlock() {
-    getCustomHeap()->unlock();
   }
 
   void check_heap(void) {

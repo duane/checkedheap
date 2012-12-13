@@ -31,6 +31,7 @@ class NHeap : RegionHeap {
       assert(status == false);
     }
     _free_bitmap.clear();
+    _quarantine_bitmap.clear();
   }
 
   ~NHeap() {
@@ -86,18 +87,25 @@ class NHeap : RegionHeap {
     uint32_t invalidated_idx = 0;
     if (_quarantine.queue(idx, &invalidated_idx)) {
       _free_bitmap.reset(invalidated_idx);
+      _quarantine_bitmap.reset(invalidated_idx);
       bool invalidated = _free.queue(invalidated_idx, &invalidated_idx);
       assert(invalidated == false);
     }
+    _quarantine_bitmap.tryToSet(idx);
     return true;
+  }
+
+  inline bool owns(void* ptr) {
+    return getIndex(ptr) >= 0;
   }
 
   inline size_t getSize(void* ptr) {
     ssize_t idx = getIndex(ptr);
-    if (idx < 0) {
+    if (idx < 0
+        || !_free_bitmap.isSet(idx)
+        || _quarantine_bitmap.isSet(idx)) {
       return 0;
-    }
-    const size_t n = AllocSize;
+    } 
 
     return AllocSize;
   }
@@ -105,11 +113,13 @@ class NHeap : RegionHeap {
   inline void validate(void) {
     // Freed memory.
     for (size_t i = 0; i < _free.size(); ++i) {
+      assert(!_free_bitmap.isSet(i));
       checkObject(_free[i]);
     }
 
     // Quarantined memory.
     for (size_t i = 0; i < _quarantine.size(); ++i) {
+      assert(_quarantine_bitmap.isSet(i));
       checkObject(_quarantine[i]);
     }
 
@@ -190,6 +200,7 @@ class NHeap : RegionHeap {
     if (ValidateOnMalloc) {
       checkObject(i);
     }
+    _quarantine_bitmap.reset(i);
     _free_bitmap.tryToSet(i);
     return getAlloc(i);
   }
@@ -210,6 +221,7 @@ class NHeap : RegionHeap {
   StaticQueue<uint32_t, NUM_OBJECTS> _free;
 
   StaticBitMap<NUM_OBJECTS> _free_bitmap;
+  StaticBitMap<NUM_OBJECTS> _quarantine_bitmap;
 
   uint8_t* _heap;
 };
