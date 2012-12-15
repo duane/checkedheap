@@ -3,6 +3,8 @@ DEBUG ?= -g
 UNOPT = -O0 $(DEBUG)
 OPT = -O3 $(DEBUG) -DNDEBUG=1
 CFLAGS=-Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror -finline-functions -ffast-math -fomit-frame-pointer -D_REENTRANT=1 -pipe $(INCLUDES) -fPIC
+CTHREADS=-DCHECK_HEAP_THREADED=1
+LDTHREADS=-lpthread
 CXXFLAGS=$(CFLAGS) -fno-rtti $(UNOPT)
 OPTCXXFLAGS=$(CFLAGS) -fno-rtti $(OPT)
 LDFLAGS=
@@ -30,17 +32,24 @@ SRCS += Heap-Layers/wrappers/gnuwrapper.cpp
 endif
 
 LIBPATH = libcheckedheap.$(LIBEXT)
+LIBPATH_THREAD = libcheckedheap_thread.$(LIBEXT)
 STUBLIBPATH = libcheckedheapstub.$(LIBEXT)
 
-all: libcheckedheap libcheckheapstub
+all: libcheckedheap libcheckedheap_thread libcheckheapstub
 
-opt: libcheckedheapopt libcheckheapstub
+opt: libcheckedheapopt libcheckheapstub libcheckedheapopt_thread
 
 libcheckedheapopt:
 	$(CXX) -o $(LIBPATH) $(SRCS) $(OPTCXXFLAGS) $(LDFLAGS)
 
+libcheckedheapopt_thread:
+	$(CXX) -o $(LIBPATH_THREAD) $(SRCS) $(OPTCXXFLAGS) $(CTHREADS) $(LDFLAGS) $(LDTHREADS)
+
 libcheckedheap:
 	$(CXX) -o $(LIBPATH) $(SRCS)  $(CXXFLAGS) $(LDFLAGS)
+
+libcheckedheap_thread:
+	$(CXX) -o $(LIBPATH_THREAD) $(SRCS)  $(CXXFLAGS) $(CTHREADS) $(LDFLAGS)  $(LDTHREADS)
 
 libcheckheapstub:
 	$(CC) -o $(STUBLIBPATH) $(STUBSRCS) $(CFLAGS) $(LDFLAGS) $(UNOPT)

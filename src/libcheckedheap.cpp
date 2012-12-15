@@ -11,7 +11,15 @@ using namespace HL;
 
 enum { PageSize = 4096 };
 
-typedef ANSIWrapper<CheckedHeap<MmapAlloc, PageSize> > TheCheckedHeap;
+template <class SourceHeap, size_t PageSize>
+class CheckedHeapWrapper : public
+#ifdef CHECK_HEAP_THREADED
+  LockedHeap<PosixLockType, CheckedHeap<SourceHeap, PageSize> > {};
+#else
+  CheckedHeap<SourceHeap, PageSize> {};
+#endif
+
+typedef ANSIWrapper<CheckedHeapWrapper<MmapAlloc, PageSize> > TheCheckedHeap;
 
 class TheCustomHeapType : public TheCheckedHeap {};
 
@@ -51,9 +59,15 @@ extern "C" {
   }
 
   void xxmalloc_lock() {
+#ifdef CHECK_HEAP_THREADED
+    getCustomHeap()->lock();
+#endif
   }
 
   void xxmalloc_unlock() {
+#ifdef CHECK_HEAP_THREADED
+    getCustomHeap()->unlock();
+#endif
   }
 
   void check_heap(void) {
