@@ -1,7 +1,10 @@
-#include <checkheap2.h>
+#include <checkheap3.h>
+#include <combineheap.h>
 #include <mmapalloc.h>
 
+#include <static/staticlog.h>
 #include <locks/posixlock.h>
+#include <heaps/top/mmapheap.h>
 #include <heaps/threads/lockedheap.h>
 #include <heaps/utility/oneheap.h>
 #include <wrappers/ansiwrapper.h>
@@ -10,18 +13,29 @@
 using namespace HL;
 
 enum { PageSize = 4096 };
+enum { Quarantine = 32,
+       MinSize = MallocInfo::MinSize,
+       MaxSize = PageSize / 2,
+       ChunkSize = 1 << 16,
+       HeapSize = 1 << 30,
+       Alignment = MallocInfo::Alignment };
 
-template <class SourceHeap, size_t PageSize>
+class SourceHeap : public MmapHeap {
+ public:
+  inline bool free(void* ptr) {
+    MmapHeap::free(ptr);
+    return true;
+  }
+};
+
 class CheckedHeapWrapper : public
 #ifdef CHECK_HEAP_THREADED
-  LockedHeap<PosixLockType, CheckedHeap<SourceHeap, PageSize> > {};
+  LockedHeap<PosixLockType, FatalWrapper<CombineHeap<CheckedHeap<SourceHeap, HeapSize, ChunkSize, Quarantine, MinSize, MaxSize, Alignment>, SourceHeap> > > {};
 #else
-  CheckedHeap<SourceHeap, PageSize> {};
+  FatalWrapper<CombineHeap<CheckedHeap<SourceHeap, HeapSize, ChunkSize, Quarantine, MinSize, MaxSize, Alignment>, SourceHeap> > {};
 #endif
 
-typedef ANSIWrapper<CheckedHeapWrapper<MmapAlloc, PageSize> > TheCheckedHeap;
-
-class TheCustomHeapType : public TheCheckedHeap {};
+class TheCustomHeapType : public ANSIWrapper<CheckedHeapWrapper> {};
 
 inline static TheCustomHeapType* getCustomHeap() {
   static char buf[sizeof(TheCustomHeapType)];
@@ -29,21 +43,6 @@ inline static TheCustomHeapType* getCustomHeap() {
     new (buf) TheCustomHeapType;
   return _theCustomHeap;
 }
-
-/*
-class InitOnce {
- public:
-  struct sigaction sig_act;
-
-  InitOnce(void) {
-    sig_act.sa_flags = SA_SIGINFO;
-    sigemptyset(&sig_act.sa_mask);
-    sig_act.sa_sigaction = handler;
-    if (sigaction(SIGSEGV, &sig_act, NULL) == -1)
-      abort();
-    }
-};
-*/
 
 extern "C" {
   void* xxmalloc(size_t sz) {
@@ -68,10 +67,6 @@ extern "C" {
 #ifdef CHECK_HEAP_THREADED
     getCustomHeap()->unlock();
 #endif
-  }
-
-  void check_heap(void) {
-    getCustomHeap()->validate();
   }
 }
 
