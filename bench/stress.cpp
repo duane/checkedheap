@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
   srandomdev();
   const size_t NUM_ALLOCS = 10000;
   const size_t MEM_LIMIT = 1 << 25;
-  const size_t NUM_CHUNKS = 10000000;
+  const size_t NUM_CHUNKS = 1000000;
   size_t mu = (size_t)atol(argv[1]);
   const size_t sigma = mu / 4;
   void* ptrs[NUM_ALLOCS] = {0};

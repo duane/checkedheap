@@ -1,9 +1,9 @@
 CC=gcc
 CXX=g++
 
-CFLAGS=-g -O0 -Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror -I../DieHard/src/replicated
+CFLAGS=-g -O3 -Wall -Wextra -Wno-unused -Wno-unused-parameter -Werror -I../DieHard/src/replicated
 CXXFLAGS=$(CFLAGS)
-LDFLAGS=-L.. -lcheckedheapstub -lpthread
+LDFLAGS=-L.. -lpthread
 
 PWD := $(shell pwd)
 LIBDIR := $(shell cd ..; pwd)

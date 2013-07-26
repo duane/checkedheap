@@ -22,7 +22,6 @@
 using namespace std;
 
 #include "../include/rng/mwc.h"
-#include <c/check_heap.h>
 
 
 unsigned long numIterations = 1000;
@@ -260,8 +259,6 @@ main (int argc, char * argv[])
   for (int i = 0; i < numThreads; i++) {
     pthread_join (t[i], NULL);
   }
-
-  check_heap();
 
   return 0;
 }
